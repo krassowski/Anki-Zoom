@@ -4,6 +4,7 @@
 # License: GNU GPL, version 3 or later; http://www.gnu.org/copyleft/gpl.html
 
 """Add-on for Anki 2.1 to zoom in or out."""
+import ctypes
 
 from types import MethodType
 
@@ -14,15 +15,12 @@ from PyQt5.QtWidgets import QAction, QMenu
 from aqt import mw
 from aqt.webview import AnkiWebView, QWebEngineView
 from anki.hooks import addHook, runHook, wrap
+from aqt.utils import showInfo
 from anki.lang import _
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 
-# Standard zoom factors for the main views of the central area:
-deck_browser_standard_zoom = 1.0
-overview_standard_zoom = 1.0
-reset_required_standard_zoom = overview_standard_zoom
-review_standard_zoom = 1.0
+# Standard zoom factors for the main views of the central area
 # Before you change the review_standard_zoom size, maybe you should
 # use larger fonts in your decks.
 
@@ -33,34 +31,54 @@ review_standard_zoom = 1.0
 # possible.
 zoom_step = 2.0**0.25
 
+config = mw.addonManager.getConfig(__name__)
+
 
 def zoom_in(step=None):
     """Increase the text size."""
     if not step:
         step = zoom_step
-    mw.web.setZoomFactor(mw.web.zoomFactor() * step)
+    
+    change_zoom(mw.web.zoomFactor() * step)
 
 
 def zoom_out(step=None):
     """Decrease the text size."""
     if not step:
         step = zoom_step
-    mw.web.setZoomFactor(mw.web.zoomFactor() / step)
+    change_zoom(mw.web.zoomFactor() / step)
+    
 
+def set_zoom(state=None, *args):
+    """Set the zoom on state change"""
+    state = mw.state
+    
+    if state in ['deckBrowser', 'overview']:
+        mw.web.setZoomFactor( config[ 'overview_zoom' ] )
+    elif state == 'review':
+        mw.web.setZoomFactor( config[ 'review_zoom' ] )
+
+def change_zoom(new_zoom_level):
+    """When zoom is changed, save the values"""
+    state = mw.state
+    
+    if state in ['deckBrowser', 'overview']:
+        config[ 'overview_zoom' ] = new_zoom_level
+    elif state == 'review':
+        config[ 'review_zoom' ] = new_zoom_level
+    
+    mw.addonManager.writeConfig(__name__, config)
+    mw.web.setZoomFactor( new_zoom_level )
 
 def reset_zoom(state=None, *args):
     """Reset the text size."""
     if not state:
         state = mw.state
-    standard_zoom = deck_browser_standard_zoom
-    if 'overview' == state:
-        standard_zoom = overview_standard_zoom
-    if 'requestRequired' == state:
-        standard_zoom = reset_required_standard_zoom
-    if 'review' == state:
-        standard_zoom = review_standard_zoom
-    mw.web.setZoomFactor(standard_zoom)
-
+    
+    if state in ['deckBrowser', 'overview']:
+        change_zoom( config[ 'overview_zoom_default' ] )
+    elif state == 'review':
+        change_zoom( config[ 'review_zoom_default' ] )
 
 def add_action(submenu, label, callback, shortcut=None):
     """Add action to menu"""
@@ -109,12 +127,6 @@ def handle_wheel_event(event):
     else:
         original_mw_web_wheelEvent(event)
 
-
-def run_move_to_state_hook(state, *args):
-    """Run a hook whenever we have changed the state."""
-    runHook("movedToState", state)
-
-
 def real_zoom_factor(self):
     """Use the default zoomFactor.
 
@@ -123,8 +135,7 @@ def real_zoom_factor(self):
     return QWebEngineView.zoomFactor(self)
 
 
-mw.moveToState = MethodType(wrap(mw.moveToState.__func__, run_move_to_state_hook), mw)
-addHook('movedToState', reset_zoom)
+addHook('afterStateChange', set_zoom)
 original_mw_web_wheelEvent = mw.web.wheelEvent
 mw.web.wheelEvent = handle_wheel_event
 mw.web.zoomFactor = MethodType(real_zoom_factor, mw.web)
