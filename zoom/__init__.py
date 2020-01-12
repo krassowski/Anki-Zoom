@@ -18,7 +18,7 @@ from anki.hooks import addHook, runHook, wrap
 from aqt.utils import showInfo
 from anki.lang import _
 
-__version__ = "1.1.1"
+__version__ = "1.2.0"
 
 # Standard zoom factors for the main views of the central area
 # Before you change the review_standard_zoom size, maybe you should
